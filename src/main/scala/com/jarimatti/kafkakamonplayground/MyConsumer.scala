@@ -1,14 +1,22 @@
 package com.jarimatti.kafkakamonplayground
 
+import kamon.Kamon
+import kamon.instrumentation.kafka.client.KafkaInstrumentation
+import kamon.tag.{Lookups, TagSet}
+import kamon.trace.Span
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.common.serialization.Serdes
+import org.slf4j.LoggerFactory
 
 import java.time.Duration
 import java.util.Properties
 import scala.jdk.CollectionConverters._
 
 object MyConsumer extends App {
-  println("Consumer starting")
+  Kamon.init()
+  val log = LoggerFactory.getLogger(MyProducer.getClass)
+
+  log.info("Consumer starting")
 
   val topic = "my-topic"
 
@@ -24,15 +32,35 @@ object MyConsumer extends App {
     props, keySerdes.deserializer(), valueSerdes.deserializer())
 
   consumer.subscribe(Seq(topic).asJava)
+  log.info(s"Current context: ${Kamon.currentContext()}")
+  log.info(s"Current span trace ID: ${Kamon.currentSpan().trace.id.string}")
+  log.info(s"Current span ID: ${Kamon.currentSpan().id.string}")
+  log.info(s"Current span parent ID: ${Kamon.currentSpan().parentId.string}")
 
   try {
     while (true) {
       val records = consumer.poll(Duration.ofSeconds(1))
-      val iterator = records.iterator()
-      while (iterator.hasNext) {
-        val record = iterator.next()
-        println(record.toString)
-      }
+      records.iterator().forEachRemaining(record => KafkaInstrumentation.runWithConsumerSpan(record) {
+        Kamon.currentSpan().mark("consumer.start")
+        log.info(s"Current context: ${Kamon.currentContext()}")
+        log.info(s"Current context tags: ${Kamon.currentContext().tags}")
+        log.info(s"Is span empty: ${Kamon.currentSpan().isEmpty}")
+        log.info(s"Is span remote: ${Kamon.currentSpan().isRemote}")
+        log.info(s"Current span trace ID: ${Kamon.currentSpan().trace.id.string}")
+        log.info(s"Current span ID: ${Kamon.currentSpan().id.string}")
+        log.info(s"Current span parent ID: ${Kamon.currentSpan().parentId.string}")
+
+        // Interesting: calling this manually at this point returns an empty context.
+        val incomingContext = KafkaInstrumentation.extractContext(record)
+        log.info(s"Incoming context: ${incomingContext}")
+        log.info(s"Incoming context span ID: ${incomingContext.get(Span.Key).id.string}")
+        log.info(s"Incoming context span parent ID: ${incomingContext.get(Span.Key).parentId.string}")
+        log.info(s"Incoming context nonEmpty(): ${incomingContext.nonEmpty()}")
+
+        log.info(s"Incoming record: ${record}")
+        Thread.sleep(1000)
+        Kamon.currentSpan().mark("consumer.done")
+      })
     }
   } finally {
     consumer.close()
