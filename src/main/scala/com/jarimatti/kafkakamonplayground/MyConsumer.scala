@@ -1,8 +1,8 @@
 package com.jarimatti.kafkakamonplayground
 
+import com.typesafe.config.ConfigFactory
 import kamon.Kamon
 import kamon.instrumentation.kafka.client.KafkaInstrumentation
-import kamon.tag.{Lookups, TagSet}
 import kamon.trace.Span
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.common.serialization.Serdes
@@ -13,7 +13,8 @@ import java.util.Properties
 import scala.jdk.CollectionConverters._
 
 object MyConsumer extends App {
-  Kamon.init()
+  val config = ConfigFactory.parseString("kamon.environment.service = MyConsumer").withFallback(ConfigFactory.load())
+  Kamon.init(config)
   val log = LoggerFactory.getLogger(MyProducer.getClass)
 
   log.info("Consumer starting")

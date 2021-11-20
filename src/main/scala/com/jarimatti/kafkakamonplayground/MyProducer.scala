@@ -1,7 +1,8 @@
 package com.jarimatti.kafkakamonplayground
 
+import com.typesafe.config.ConfigFactory
 import kamon.Kamon
-import kamon.trace.Span
+import kamon.instrumentation.context.HasContext
 import kamon.trace.Trace.SamplingDecision
 import org.apache.kafka.clients.producer.{KafkaProducer, Producer, ProducerConfig, ProducerRecord}
 import org.apache.kafka.common.serialization.Serdes
@@ -12,7 +13,9 @@ import java.util.Properties
 import scala.concurrent.ExecutionContext
 
 object MyProducer extends App {
-  Kamon.init()
+  val config = ConfigFactory.parseString("kamon.environment.service = MyProducer").withFallback(ConfigFactory.load())
+  Kamon.init(config)
+
 
   val log = LoggerFactory.getLogger(MyProducer.getClass)
   log.info("Producer starting")
@@ -51,6 +54,7 @@ object MyProducer extends App {
       "key",
       s"Hello, World! ${Instant.now()}"
     )
+    producerRecord.asInstanceOf[HasContext].setContext(Kamon.currentContext())
 
     val metadata = producer.send(producerRecord).get()
 
